@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import asyncio
+import re
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -73,7 +74,7 @@ async def reg_raid_callback(call: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "show_participants")
 async def show_participants_callback(call: CallbackQuery):
-    cur.execute("SELECT username, nickname, power FROM participants")
+    cur.execute("SELECT username, nickname, power FROM participants ORDER BY CAST(power AS REAL) DESC")
     rows = cur.fetchall()
     if not rows:
         await call.message.answer("Список пуст")
@@ -95,7 +96,6 @@ async def admin_panel_callback(call: CallbackQuery, state: FSMContext):
 async def del_all_callback(call: CallbackQuery):
     if call.from_user.id != ADMIN_ID:
         return
-    # Удаляем участников
     cur.execute("DELETE FROM participants")
     conn.commit()
     await call.message.answer("🗑 Все участники удалены", reply_markup=admin_kb_inline)
@@ -117,20 +117,25 @@ async def back_callback(call: CallbackQuery, state: FSMContext):
 @dp.message(Register.nickname)
 async def reg_nickname(message: Message, state: FSMContext):
     data = await state.get_data()
-    # удаляем предыдущее сообщение с подсказкой
+    # удаляем подсказку
     try:
         await bot.delete_message(chat_id=message.chat.id, message_id=data.get("prompt_message_id"))
     except:
         pass
     await state.update_data(nickname=message.text)
-    msg = await message.answer("Введите БМ отряда:")
+    msg = await message.answer("Введите БМ отряда (только цифры и точка):")
     await state.update_data(prompt_message_id=msg.message_id)
     await state.set_state(Register.power)
 
 @dp.message(Register.power)
 async def reg_power(message: Message, state: FSMContext):
+    # проверка БМ
+    if not re.fullmatch(r"[\d.]+", message.text):
+        await message.answer('❌ Только цифры и знак "."')
+        return
+
     data = await state.get_data()
-    # удаляем предыдущее сообщение с подсказкой
+    # удаляем подсказку
     try:
         await bot.delete_message(chat_id=message.chat.id, message_id=data.get("prompt_message_id"))
     except:
@@ -171,7 +176,6 @@ async def reg_power(message: Message, state: FSMContext):
 async def del_one(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    # удаляем подсказку
     data = await state.get_data()
     try:
         await bot.delete_message(chat_id=message.chat.id, message_id=data.get("prompt_message_id"))
