@@ -129,17 +129,27 @@ async def reg_nickname(message: Message, state: FSMContext):
 
 @dp.message(Register.power)
 async def reg_power(message: Message, state: FSMContext):
-    # проверка БМ
-    if not re.fullmatch(r"[\d.]+", message.text):
-        await message.answer('❌ Только цифры и знак "."')
-        return
-
     data = await state.get_data()
-    # удаляем подсказку
+
+    # Удаляем старую подсказку "Введите БМ"
     try:
         await bot.delete_message(chat_id=message.chat.id, message_id=data.get("prompt_message_id"))
     except:
         pass
+
+    # Проверка БМ: только цифры и точка
+    if not re.fullmatch(r"[\d.]+", message.text):
+        warning_msg = await message.answer('❌ Только цифры и знак "."')
+        # сохраняем id предупреждения
+        await state.update_data(warning_msg_id=warning_msg.message_id)
+        return
+
+    # Если была предыдущая ошибка, удаляем сообщение предупреждения
+    if data.get("warning_msg_id"):
+        try:
+            await bot.delete_message(chat_id=message.chat.id, message_id=data["warning_msg_id"])
+        except:
+            pass
 
     # сохраняем участника
     cur.execute("""
