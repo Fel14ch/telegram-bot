@@ -11,6 +11,11 @@ from aiogram.fsm.state import StatesGroup, State
 # ====== НАСТРОЙКИ ======
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
+
+# 🔽 ВОТ СЮДА ВСТАВЛЯЕШЬ ДАННЫЕ ГРУППЫ
+GROUP_ID = int(os.getenv("GROUP_ID"))     # например -1001234567890
+TOPIC_ID = int(os.getenv("TOPIC_ID"))     # например 42
+
 DB_NAME = "participants.db"
 # ======================
 
@@ -92,10 +97,25 @@ async def reg_power(message: Message, state: FSMContext):
     ))
     conn.commit()
 
+    # 🔔 ПУБЛИКАЦИЯ В ТЕМУ ГРУППЫ
+    try:
+        await bot.send_message(
+            chat_id=GROUP_ID,
+            message_thread_id=TOPIC_ID,
+            text=(
+                "🆕 Новый участник рейда:\n"
+                f"👤 Ник: {data['nickname']}\n"
+                f"⚔️ БМ: {message.text}\n"
+                f"📎 TG: @{message.from_user.username}"
+            )
+        )
+    except Exception as e:
+        print("Ошибка отправки в группу:", e)
+
     await message.answer("✅ Спасибо за регистрацию!", reply_markup=menu_kb)
     await state.clear()
 
-# ====== ПРОСМОТР УЧАСТНИКОВ ======
+# ====== ПРОСМОТР ======
 @dp.message(F.text == "Посмотреть участников")
 async def show_participants(message: Message):
     cur.execute("SELECT tg_name, username, nickname, power FROM participants")
@@ -121,7 +141,7 @@ async def admin_panel(message: Message, state: FSMContext):
 
     await message.answer("Админ панель", reply_markup=admin_kb)
 
-# ====== УДАЛИТЬ ВСЕХ ======
+# ====== УДАЛЕНИЕ ======
 @dp.message(F.text == "Удалить всех участников")
 async def delete_all(message: Message):
     if message.from_user.id != ADMIN_ID:
@@ -131,7 +151,6 @@ async def delete_all(message: Message):
     conn.commit()
     await message.answer("🗑 Все участники удалены", reply_markup=admin_kb)
 
-# ====== УДАЛИТЬ ОДНОГО ======
 @dp.message(F.text == "Удалить участника")
 async def delete_one_prompt(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
@@ -153,7 +172,7 @@ async def delete_one(message: Message, state: FSMContext):
 
 # ====== НАЗАД ======
 @dp.message(F.text == "Назад")
-async def back_to_menu(message: Message, state: FSMContext):
+async def back(message: Message, state: FSMContext):
     await state.clear()
     await message.answer("Главное меню", reply_markup=menu_kb)
 
