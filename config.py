@@ -1,6 +1,15 @@
-BOT_TOKEN = "ТВОЙ_ТОКЕН_БОТА"
+import os
 
-SPREADSHEET_NAME = "НАЗВАНИЕ_ТАБЛИЦЫ"
-SHEET_INDEX = 5  # 6-й лист (нумерация с 0)
+# 🔐 Telegram
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-ADMINS = {441397365}  # твой Telegram ID
+# 👑 Админы
+ADMINS = {int(os.getenv("ADMIN_ID"))}
+
+# 📊 Google Sheets
+SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME")
+SHEET_INDEX = int(os.getenv("SHEET_INDEX", 5))
+
+# 👥 Группа и тема
+GROUP_ID = int(os.getenv("GROUP_ID"))
+TOPIC_ID = int(os.getenv("TOPIC_ID"))
