@@ -12,12 +12,10 @@ from aiogram.fsm.state import StatesGroup, State
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
-# ВСТАВЬ СВОИ ID группы и темы
 GROUP_ID = int(os.getenv("GROUP_ID"))  # например -1003770135976
 TOPIC_ID = int(os.getenv("TOPIC_ID"))  # например 8
 
 DB_NAME = "participants.db"
-# ======================
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
@@ -28,7 +26,6 @@ cur = conn.cursor()
 cur.execute("""
 CREATE TABLE IF NOT EXISTS participants (
     user_id INTEGER PRIMARY KEY,
-    tg_name TEXT,
     username TEXT,
     nickname TEXT,
     power TEXT
@@ -70,19 +67,20 @@ async def start(message: Message, state: FSMContext):
 # ====== CALLBACK QUERY ======
 @dp.callback_query(F.data == "reg_raid")
 async def reg_raid_callback(call: CallbackQuery, state: FSMContext):
-    await call.message.answer("Введите никнейм из игры:")
+    msg = await call.message.answer("Введите никнейм из игры:")
+    await state.update_data(prompt_message_id=msg.message_id)
     await state.set_state(Register.nickname)
 
 @dp.callback_query(F.data == "show_participants")
 async def show_participants_callback(call: CallbackQuery):
-    cur.execute("SELECT tg_name, username, nickname, power FROM participants")
+    cur.execute("SELECT username, nickname, power FROM participants")
     rows = cur.fetchall()
     if not rows:
         await call.message.answer("Список пуст")
         return
     text = ""
     for r in rows:
-        text += f"{r[0]} | @{r[1]} | {r[2]} | {r[3]}\n"
+        text += f"@{r[0]} | {r[1]} | {r[2]}\n"
     await call.message.answer(text)
 
 @dp.callback_query(F.data == "admin_panel")
@@ -97,6 +95,7 @@ async def admin_panel_callback(call: CallbackQuery, state: FSMContext):
 async def del_all_callback(call: CallbackQuery):
     if call.from_user.id != ADMIN_ID:
         return
+    # Удаляем участников
     cur.execute("DELETE FROM participants")
     conn.commit()
     await call.message.answer("🗑 Все участники удалены", reply_markup=admin_kb_inline)
@@ -105,7 +104,8 @@ async def del_all_callback(call: CallbackQuery):
 async def del_one_prompt_callback(call: CallbackQuery, state: FSMContext):
     if call.from_user.id != ADMIN_ID:
         return
-    await call.message.answer("Введите никнейм участника:")
+    msg = await call.message.answer("Введите никнейм участника:")
+    await state.update_data(prompt_message_id=msg.message_id)
     await state.set_state(AdminDelete.waiting_nickname)
 
 @dp.callback_query(F.data == "back")
@@ -116,19 +116,32 @@ async def back_callback(call: CallbackQuery, state: FSMContext):
 # ====== РЕГИСТРАЦИЯ ======
 @dp.message(Register.nickname)
 async def reg_nickname(message: Message, state: FSMContext):
+    data = await state.get_data()
+    # удаляем предыдущее сообщение с подсказкой
+    try:
+        await bot.delete_message(chat_id=message.chat.id, message_id=data.get("prompt_message_id"))
+    except:
+        pass
     await state.update_data(nickname=message.text)
-    await message.answer("Введите БМ отряда:")
+    msg = await message.answer("Введите БМ отряда:")
+    await state.update_data(prompt_message_id=msg.message_id)
     await state.set_state(Register.power)
 
 @dp.message(Register.power)
 async def reg_power(message: Message, state: FSMContext):
     data = await state.get_data()
+    # удаляем предыдущее сообщение с подсказкой
+    try:
+        await bot.delete_message(chat_id=message.chat.id, message_id=data.get("prompt_message_id"))
+    except:
+        pass
+
+    # сохраняем участника
     cur.execute("""
-    INSERT OR REPLACE INTO participants
-    VALUES (?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO participants (user_id, username, nickname, power)
+    VALUES (?, ?, ?, ?)
     """, (
         message.from_user.id,
-        message.from_user.full_name,
         message.from_user.username,
         data["nickname"],
         message.text
@@ -158,6 +171,12 @@ async def reg_power(message: Message, state: FSMContext):
 async def del_one(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
+    # удаляем подсказку
+    data = await state.get_data()
+    try:
+        await bot.delete_message(chat_id=message.chat.id, message_id=data.get("prompt_message_id"))
+    except:
+        pass
     cur.execute("DELETE FROM participants WHERE nickname = ?", (message.text,))
     conn.commit()
     await message.answer("✅ Участник удалён", reply_markup=admin_kb_inline)
