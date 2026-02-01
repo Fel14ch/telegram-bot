@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import asyncio
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
@@ -9,7 +10,7 @@ from aiogram.fsm.state import StatesGroup, State
 
 # ====== НАСТРОЙКИ ======
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))  # твой Telegram ID
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
 DB_NAME = "participants.db"
 # ======================
 
@@ -30,12 +31,13 @@ CREATE TABLE IF NOT EXISTS participants (
 """)
 conn.commit()
 
-
 # ====== FSM ======
 class Register(StatesGroup):
     nickname = State()
     power = State()
 
+class AdminDelete(StatesGroup):
+    waiting_nickname = State()
 
 # ====== КНОПКИ ======
 menu_kb = ReplyKeyboardMarkup(
@@ -56,12 +58,11 @@ admin_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-
 # ====== START ======
 @dp.message(Command("start"))
-async def start(message: Message):
+async def start(message: Message, state: FSMContext):
+    await state.clear()
     await message.answer("Добро пожаловать 👋", reply_markup=menu_kb)
-
 
 # ====== РЕГИСТРАЦИЯ ======
 @dp.message(F.text == "Зарегистрироваться на рейд")
@@ -69,13 +70,11 @@ async def reg_start(message: Message, state: FSMContext):
     await message.answer("Введите никнейм из игры:")
     await state.set_state(Register.nickname)
 
-
 @dp.message(Register.nickname)
 async def reg_nickname(message: Message, state: FSMContext):
     await state.update_data(nickname=message.text)
     await message.answer("Введите БМ отряда:")
     await state.set_state(Register.power)
-
 
 @dp.message(Register.power)
 async def reg_power(message: Message, state: FSMContext):
@@ -96,10 +95,9 @@ async def reg_power(message: Message, state: FSMContext):
     await message.answer("✅ Спасибо за регистрацию!", reply_markup=menu_kb)
     await state.clear()
 
-
-# ====== ПРОСМОТР ======
+# ====== ПРОСМОТР УЧАСТНИКОВ ======
 @dp.message(F.text == "Посмотреть участников")
-async def show_all(message: Message):
+async def show_participants(message: Message):
     cur.execute("SELECT tg_name, username, nickname, power FROM participants")
     rows = cur.fetchall()
 
@@ -113,17 +111,17 @@ async def show_all(message: Message):
 
     await message.answer(text)
 
-
-# ====== АДМИН ======
+# ====== АДМИН ПАНЕЛЬ ======
 @dp.message(F.text == "Админ панель")
-async def admin_panel(message: Message):
+async def admin_panel(message: Message, state: FSMContext):
+    await state.clear()
     if message.from_user.id != ADMIN_ID:
         await message.answer("⛔ Нет доступа")
         return
 
     await message.answer("Админ панель", reply_markup=admin_kb)
 
-
+# ====== УДАЛИТЬ ВСЕХ ======
 @dp.message(F.text == "Удалить всех участников")
 async def delete_all(message: Message):
     if message.from_user.id != ADMIN_ID:
@@ -133,29 +131,31 @@ async def delete_all(message: Message):
     conn.commit()
     await message.answer("🗑 Все участники удалены", reply_markup=admin_kb)
 
-
+# ====== УДАЛИТЬ ОДНОГО ======
 @dp.message(F.text == "Удалить участника")
-async def delete_one_prompt(message: Message):
+async def delete_one_prompt(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
 
     await message.answer("Введите никнейм участника:")
+    await state.set_state(AdminDelete.waiting_nickname)
 
-
-@dp.message(F.text.regexp(r".+"))
-async def delete_one(message: Message):
+@dp.message(AdminDelete.waiting_nickname)
+async def delete_one(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
 
     cur.execute("DELETE FROM participants WHERE nickname = ?", (message.text,))
     conn.commit()
-    await message.answer("Участник удалён", reply_markup=admin_kb)
 
+    await message.answer("✅ Участник удалён", reply_markup=admin_kb)
+    await state.clear()
 
+# ====== НАЗАД ======
 @dp.message(F.text == "Назад")
-async def back(message: Message):
+async def back_to_menu(message: Message, state: FSMContext):
+    await state.clear()
     await message.answer("Главное меню", reply_markup=menu_kb)
-
 
 # ====== RUN ======
 async def main():
